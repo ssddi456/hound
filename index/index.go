@@ -6,14 +6,21 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"io/ioutil"
+	"bytes"
+	"log"
 	"os"
 	"path/filepath"
 	"sync"
 	"time"
 	"unicode/utf8"
 
-	"github.com/etsy/hound/codesearch/index"
-	"github.com/etsy/hound/codesearch/regexp"
+	"github.com/ssddi456/hound/codesearch/index"
+	"github.com/ssddi456/hound/codesearch/regexp"
+
+	"golang.org/x/text/encoding/simplifiedchinese"
+	"golang.org/x/text/transform" 
+
 )
 
 const (
@@ -278,7 +285,7 @@ func validUTF8IgnoringPartialTrailingRune(p []byte) bool {
 	return true
 }
 
-func addFileToIndex(ix *index.IndexWriter, dst, src, path string) (string, error) {
+func addFileToIndex(ix *index.IndexWriter, dst, src, path string, encoding string) (string, error) {
 	rel, err := filepath.Rel(src, path)
 	if err != nil {
 		return "", err
@@ -290,6 +297,17 @@ func addFileToIndex(ix *index.IndexWriter, dst, src, path string) (string, error
 	}
 	defer r.Close()
 
+	var reader io.Reader
+	reader = r
+
+	// 把gbk转换成utf8
+	if encoding == "gbk" {
+
+		gbkencode := transform.NewReader(r, simplifiedchinese.GBK.NewDecoder())
+
+		reader = gbkencode
+	}
+
 	dup := filepath.Join(dst, "raw", rel)
 	w, err := os.Create(dup)
 	if err != nil {
@@ -300,7 +318,27 @@ func addFileToIndex(ix *index.IndexWriter, dst, src, path string) (string, error
 	g := gzip.NewWriter(w)
 	defer g.Close()
 
-	return ix.Add(rel, io.TeeReader(r, g)), nil
+	// 创建索引
+	skipReason := ix.Add(rel, io.TeeReader(reader, g), true)
+	if skipReason == "invalid UTF-8" {
+		_, e := r.Seek(0,0)
+		if e != nil {
+			return "", e
+		}
+		buf, e := ioutil.ReadAll(r)
+		if e != nil {
+			return "", e
+		}
+		buf, e = index.DecodeGBK(buf)
+		if e != nil {
+			return "", e
+		}
+		reader = bytes.NewReader(buf)
+		w.Seek(0, 0)
+		skipReason = ix.Add(rel, io.TeeReader(reader, g), true)
+	}
+
+	return skipReason, nil
 }
 
 func addDirToIndex(dst, src, path string) error {
@@ -390,20 +428,39 @@ func indexAllFiles(opt *IndexOptions, dst, src string) error {
 			return nil
 		}
 
+		// 在这里修正utf8和gbk的问题
 		txt, err := isTextFile(path)
 		if err != nil {
 			return err
 		}
+		
+		encoding := "utf8"
 
 		if !txt {
-			excluded = append(excluded, &ExcludedFile{
-				rel,
-				reasonNotText,
-			})
-			return nil
+			buf, e := ioutil.ReadFile(path)
+			if e != nil {
+				log.Print("read file fail when try gbk", path)
+				excluded = append(excluded, &ExcludedFile{
+					rel,
+					reasonNotText,
+				})
+				return nil
+			}
+
+			_, e = index.DecodeGBK( buf )
+
+			if e != nil {
+				excluded = append(excluded, &ExcludedFile{
+					rel,
+					reasonNotText,
+				})
+				return nil
+			} else {
+				encoding = "gbk"				
+			}
 		}
 
-		reasonForExclusion, err := addFileToIndex(ix, dst, src, path)
+		reasonForExclusion, err := addFileToIndex(ix, dst, src, path, encoding)
 		if err != nil {
 			return err
 		}

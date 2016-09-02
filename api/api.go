@@ -10,9 +10,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/etsy/hound/config"
-	"github.com/etsy/hound/index"
-	"github.com/etsy/hound/searcher"
+	"github.com/ssddi456/hound/config"
+	"github.com/ssddi456/hound/index"
+	"github.com/ssddi456/hound/searcher"
 )
 
 const (
@@ -78,7 +78,9 @@ func searchAll(
 	for i := 0; i < n; i++ {
 		r := <-ch
 		if r.err != nil {
-			return nil, r.err
+			// return nil, r.err
+			log.Printf("Failed to encode JSON: %v %v\n", r.repo, r.err)
+			continue
 		}
 
 		if r.res.Matches == nil {

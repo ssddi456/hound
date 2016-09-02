@@ -11,8 +11,7 @@ import (
 	"net/http"
 	"path/filepath"
 	"runtime"
-
-	"github.com/etsy/hound/config"
+	"github.com/ssddi456/hound/config"
 )
 
 // An http.Handler for the dev-mode case.
@@ -149,6 +148,7 @@ func (h *prdHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 // Renders a templated asset in prd-mode. This strategy will embed
 // the sources directly in a script tag on the templated page.
+
 func renderForPrd(w io.Writer, c *content, cfgJson string, r *http.Request) error {
 	var buf bytes.Buffer
 	buf.WriteString("<script>")

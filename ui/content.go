@@ -20,7 +20,6 @@ type renderer interface {
 }
 
 type content struct {
-
 	// The uri for accessing this asset
 	uri string
 

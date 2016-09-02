@@ -3,8 +3,8 @@ package client
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/etsy/hound/config"
-	"github.com/etsy/hound/index"
+	"github.com/ssddi456/hound/config"
+	"github.com/ssddi456/hound/index"
 	"net/http"
 	"net/url"
 	"regexp"

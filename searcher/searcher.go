@@ -13,9 +13,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/etsy/hound/config"
-	"github.com/etsy/hound/index"
-	"github.com/etsy/hound/vcs"
+	"github.com/ssddi456/hound/config"
+	"github.com/ssddi456/hound/index"
+	"github.com/ssddi456/hound/vcs"
 )
 
 type Searcher struct {

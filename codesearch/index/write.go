@@ -13,7 +13,11 @@ import (
 	"strings"
 	"unsafe"
 
-	"github.com/etsy/hound/codesearch/sparse"
+	"github.com/ssddi456/hound/codesearch/sparse"
+
+	"bytes" 
+	"golang.org/x/text/encoding/simplifiedchinese"
+	"golang.org/x/text/transform" 
 )
 
 // Index writing.  See read.go for details of on-disk format.
@@ -114,13 +118,29 @@ func (ix *IndexWriter) AddFile(name string) {
 		log.Print(err)
 		return
 	}
+
 	defer f.Close()
-	ix.Add(name, f)
+	skipReason := ix.Add(name, f, true)
+	if skipReason == "invalid UTF-8" {
+		// 在这里decode gbk
+		f.Seek(0, 0)
+		buf, e := ioutil.ReadAll(f)
+		if e != nil {
+			return
+		}
+
+		content, e := DecodeGBK(buf)
+
+		if e == nil {
+			// 使用解码后的内容创建索引
+			ix.Add(name, strings.NewReader(string(content)), false)
+		}
+	}
 }
 
 // Add adds the file f to the index under the given name.
 // It logs errors using package log.
-func (ix *IndexWriter) Add(name string, f io.Reader) string {
+func (ix *IndexWriter) Add(name string, f io.Reader, check_encoding bool) string {
 	ix.trigram.Reset()
 	var (
 		c          = byte(0)
@@ -133,6 +153,7 @@ func (ix *IndexWriter) Add(name string, f io.Reader) string {
 		longLines  = 0
 		skipReason = ""
 	)
+
 
 	for {
 		tv = (tv << 8) & (1<<24 - 1)
@@ -158,12 +179,14 @@ func (ix *IndexWriter) Add(name string, f io.Reader) string {
 		if n++; n >= 3 {
 			ix.trigram.Add(tv)
 		}
-		if !validUTF8((tv>>8)&0xFF, tv&0xFF) {
-			skipReason = "Invalid UTF-8"
-			if ix.LogSkip {
-				log.Printf("%s: %s\n", name, skipReason)
+		if check_encoding {
+			if !validUTF8((tv>>8)&0xFF, tv&0xFF) {
+				skipReason = "invalid UTF-8"
+				if ix.LogSkip {
+					log.Printf("%s: %s\n", name, skipReason)
+				}
+				return skipReason
 			}
-			return skipReason
 		}
 		if n > maxFileLen {
 			skipReason = "Too long"
@@ -629,6 +652,17 @@ func validUTF8(c1, c2 uint32) bool {
 		return 0x80 <= c2 && c2 < 0xc0
 	}
 	return false
+}
+
+
+func DecodeGBK(s []byte) ([]byte, error) { 
+		I := bytes.NewReader(s)
+		O := transform.NewReader(I, simplifiedchinese.GBK.NewDecoder())
+		d, e := ioutil.ReadAll(O)
+		if e != nil {
+				return nil, e
+		}
+		return d, nil
 }
 
 // sortPost sorts the postentry list.
